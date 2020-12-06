@@ -59,10 +59,10 @@ int getHashKey(char * fileName) {
 
 void addToTable(char * fileName, int size, char * content)
 
-/*Returns a char* to the contents of file, if none exist it returns an empty pointer */
+/*Returns the size and contents of a file in format n:[contents] n being size, if no contents then it returns 0: */
 char * loadContents(int key) {
     //Start at Head Node
-    currentNode = hashTable.headNode;
+    node currentNode = *hashTable.headNode;
 
     //Iterate through till a match is made
     for(int i = 0; i < MAP_SIZE; i++) {
@@ -78,14 +78,59 @@ char * loadContents(int key) {
 
             return loadedContent;
         }
-        if(currentNode.next != NULL) {
-            currentNode = currentNode.next;
+        if(!(currentNode.next != NULL)) {
+            break;
         }
+        currentNode = *currentNode.next;
     }
-
 
     char * empty = "0:"
     return char empty;
+}
+
+//Used to remove the file node and link one ahead to the rest
+void removeNode(int key) {
+    //Check if head node needs removal
+    node currentNode = *hashTable.headNode;
+    if(currentNode.key = key) {
+        if(currentNode.next != NULL) {
+            hashTable.headNode = currentNode.next;
+        }
+        else {
+            hashTable = createTable();
+        }
+    }
+
+    //Assign the nextnode to be used
+    node nextNode;
+
+    //Loop through while keeping track of nodes
+    for(int i = 0; i < MAP_SIZE; i++) {
+        //Continue only if there is a next node
+        if(currentNode.next != NULL)
+            nextNode = *currentNode.next;
+        else
+            return;
+
+
+        //Enter if it is the node to remove
+        if(key == nextNodeNode.key) {
+            //Free the memory originally allocated for the pointers
+            free(currentNode.contents);
+            free(currentNode.fileName);
+            free(currentNOde.size);
+
+            //Link the previous node to next one if there is to not lose the chain
+            if(nextNode.next != NULL)
+                currentNode.next = nextNode.next;
+            else
+                return;
+
+        }
+        //Move the node up
+        currentNode = *currentNode.next;
+
+    }
 }
 
 //make sure that the lock should be applied to all of these methods and not just delete and load
