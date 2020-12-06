@@ -1,15 +1,16 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <netdb.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
 #include <sys/socket.h>
 #include <pthread.h>
 #include <string.h>
 
 #define BUFFER_SIZE 32
 #define MAP_SIZE 8
-#define SA struct soccaddr
-#define 2777
+#define SERVER_PORT 2777
+#define MESSAGE_SIZE 1024
 
 pthread_mutex_t lock;
 
@@ -115,24 +116,17 @@ void * storeToCache(){
     pthread_mutex_unlock(&lock);
 }
 
-int main(int argc, char * argv[]) {
+//called whenever the client receives a message from the server (dispatcher)
+void messageReceived(char * receiveLine){
     pthread_t cacheThread;
 
-    char input[1024];
     char * token;
     char command[BUFFER_SIZE];
     char fileName[BUFFER_SIZE] = "";
     char contents[960] = "";
 
-    //initialize the mutex that will be used for the methods (add error handling?)
-    pthread_mutex_init(&lock, NULL);
-
-    //start tcp connection and have it always listening for dispatcher *********
-    //when something is received, perform all of the below (may move later)
-
-
     //when something received, tokenize the string delimiting by spaces
-    token = strtok(input, " ");
+    token = strtok(receiveLine, " ");
     strcpy(command, token);
 
     //further tokenize to get the other strings
@@ -148,7 +142,6 @@ int main(int argc, char * argv[]) {
             break;
         }
     }
-
 
     //check what the command was and fire off thread
     if(strcmp(command, "load")){
@@ -170,5 +163,45 @@ int main(int argc, char * argv[]) {
     }else{
         //invalid command
 
+    }
+}
+
+int main(int argc, char * argv[]) {
+    //initialize the mutex that will be used for the methods (add error handling?)
+    pthread_mutex_init(&lock, NULL);
+
+    //start tcp connection and have it always listening for dispatcher *********
+    int serverSocket, bytesRead;
+
+    char sendLine[MESSAGE_SIZE];
+    char receiveLine[MESSAGE_SIZE];
+
+    //create the socket (with error detection)
+    if((serverSocket = socket(AF_INET, SOCK_STREAM, 0)) < 0){
+
+    }
+
+    //set up the server connection
+    struct sockaddr_in serverAddress;
+    bzero(&serverAddress, sizeof(serverAddress));
+
+    serverAddress.sin_family = AF_INET;
+    serverAddress.sin_port = htons(SERVER_PORT);
+
+    //connect to server
+    if(connect(serverSocket, (struct sockaddr *) &serverAddress, sizeof(serverAddress)) < 0){
+
+    }
+
+    //write to socket to transmit to server -- implement this later for returning file information to the dispatcher
+    //snprintf(sendLine, sizeof(sendLine), "Data to be sent");
+
+    //listen for the server
+    while((bytesRead = read(serverSocket, receiveLine, MESSAGE_SIZE)) > 0){
+        //null terminate the bytes received
+        receiveLine[bytesRead] = 0;
+
+        //manage the input
+        messageReceived(receiveLine);
     }
 }
