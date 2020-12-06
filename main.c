@@ -17,6 +17,7 @@ pthread_mutex_t lock;
 typedef struct {
     int key;
     char * fileName;
+    char * size;
     char * contents;
     node * next;
 } node;
@@ -30,7 +31,8 @@ typedef struct {
 /*Method to Create the Table that will be Global Variable */
 table createTable() {
     table t;
-    node tempHead{-1, "", ""};
+    node tempHead;
+    tempHead.key = -1;
     t.headNode = tempHead;
     return t;
 }
@@ -54,30 +56,45 @@ int getHashKey(char * fileName) {
     return hashCode % length;
 }
 
+void addToTable(char * fileName, int size, char * content)
+
 /*Returns a char* to the contents of file, if none exist it returns an empty pointer */
-char * getContents(int key) {
+char * loadContents(int key) {
+    //Start at Head Node
     currentNode = hashTable.headNode;
+
+    //Iterate through till a match is made
     for(int i = 0; i < MAP_SIZE; i++) {
         if(key == currentNode.key) {
-            return currentNode.contents;
+
+            //Copy the size with room for the contents
+            char * loadedContent = malloc(strlen(currentNode.contents) + strlen(currentNode.size) + 1);
+            strcpy(loadedContent, currentNode.size);
+
+            //Combine the size with the content
+            strcat(loadedContent, currentNode.contents);
+
+
+            return loadedContent;
         }
         if(currentNode.next != NULL) {
             currentNode = currentNode.next;
         }
     }
-    char * empty = ""
+
+
+    char * empty = "0:"
     return char empty;
 }
 
 //make sure that the lock should be applied to all of these methods and not just delete and load
 void * loadFile(void * fileName) {
+    int key = getHashKey((char *)fileName);
     pthread_mutex_lock(&lock);
-    //take in the file name and use it to find the contents of the file
-    int hashKey = getHashKey(fileName);
-
     //use the hash key to return the contents of the file
-
+    char * file = loadContents(key);
     pthread_mutex_unlock(&lock);
+    return (void *)file;
 }
 
 void * deleteCache(void * fileName) {
