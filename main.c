@@ -120,6 +120,7 @@ void * storeToCache(){
 void messageReceived(char * receiveLine){
     pthread_t cacheThread;
 
+    //set to pointers to work better with the hashtable functions
     char * token;
     char * command;
     char * fileName = NULL;
