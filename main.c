@@ -227,13 +227,15 @@ void * storeToCache(void * input){
 void messageReceived(char * receiveLine){
     pthread_t cacheThread;
 
+    //set to pointers to work better with the hashtable functions
     char * token;
-    char command[BUFFER_SIZE];
-    char fileName[BUFFER_SIZE] = "";
-    char contents[960] = "";
+    char * command;
+    char * fileName = NULL;
+    char * contents = NULL;
 
     //when something received, tokenize the string delimiting by spaces
     token = strtok(receiveLine, " ");
+    command = malloc(strlen(token) + 1);
     strcpy(command, token);
 
     //further tokenize to get the other strings
@@ -241,9 +243,11 @@ void messageReceived(char * receiveLine){
         token = strtok(NULL, " ");
 
         //check if the filename or contents has a value yet
-        if(strlen(fileName) == 0){
+        if(fileName == NULL){
+            fileName = malloc(strlen(token) + 1);
             strcpy(fileName, token);
-        }else if(strlen(contents) == 0){
+        }else if(contents == NULL){
+            contents = malloc(strlen(token) + 1);
             strcpy(contents, token);
         }else{
             break;
@@ -271,6 +275,9 @@ void messageReceived(char * receiveLine){
         //invalid command
 
     }
+
+    //free the memory that was used
+
 }
 
 int main(int argc, char * argv[]) {
