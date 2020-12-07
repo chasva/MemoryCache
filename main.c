@@ -34,7 +34,7 @@ typedef struct {
 table createTable() {
     table t;
     t.size = MAP_SIZE;
-    node tempHead = {-1, NULL, NULL, NULL, NULL, NULL};
+    node tempHead = {-1, NULL, NULL, NULL, NULL,};
     t.headNode = &tempHead;
     return t;
 }
@@ -45,11 +45,11 @@ table hashTable;
 int getHashKey(char * fileName) {
     int hashCode = 0;
     int length = strlen(fileName);
-    char name[length];
+    char name[length + 1];
     strcpy(name, fileName);
 
     for(int i = 0; i < BUFFER_SIZE; i++) {
-        if(name[i] == "/n" || name[i] == "/0") {
+        if(name[i] == '\n' || name[i] == '\0') {
             break;
         }
         hashCode += fileName[i] * 19^(2 * i - i);
@@ -145,29 +145,56 @@ void removeNode(int key) {
     }
 }
 
+void deleteNode(node deletion) {
+    free(deletion.contents);
+    free(deletion.size);
+    free(deletion.fileName);
+}
+
 //MEthod to add nodes to the hash table
 void addToTable(node newNode) {
+
     node currentNode = *hashTable.headNode;
+
+
+    //If headnode has collision
+    if(currentNode.key == newNode.key) {
+        //Replace the Node, Delete it, and return
+        newNode.next = currentNode.next;
+        hashTable.headNode = &newNode;
+        deleteNode(currentNode);
+        return;
+    }
+
+    //For all other collisions
+    node nextNode;
     for(int i = 0; i < MAP_SIZE; i++) {
-        //Check for Collision and Remove it
-        if(currentNode.key == newNode.key) {
-            //Replace the Node, delete it, and return
+        if(currentNode.next != NULL)
+            nextNode = *(node *)currentNode.next;
+        else
+            break;
+        if(nextNode.key == newNode.key) {
+            newNode.next = nextNode.next;
+            currentNode.next = (void *)&newNode;
+            deleteNode(nextNode);
             return;
         }
+    }
+
+    //For empty nodes
+    for(int i = 0; i < MAP_SIZE; i++) {
         //Check if the empty node
         if(currentNode.next == NULL) {
             //Link to next node
-
+            currentNode.next = &newNode;
             //Check how long the list is then delete head if necessary
             if(i >= MAP_SIZE - 1) {
                 //Will delete the head and assign the node as necessary
-                removeNode(getHashKey(hashTable.headNode->fileName));
+                removeNode(hashTable.headNode->key);
             }
+            return;
         }
-        //Break at this point
-        if(currentNode.next == NULL) {
-            break;
-        }
+
         //Continue through loop
         currentNode = *(node *)currentNode.next;
     }
@@ -195,9 +222,6 @@ void * loadFile(void * fileName) {
     pthread_mutex_unlock(&lock);
     return (void *)file;
 
-    /*TODO Remember to free the memory that was allocated for file
-     * This should be done after it is sent back to dispatcher or printed or whatever
-     * needs to be done*/
 }
 
 void * deleteCache(void * fileName) {
@@ -212,7 +236,7 @@ void * deleteCache(void * fileName) {
 
 void * storeToCache(void * input){
     //Get the Filename, Size, and Contents store it in char * arr called data.
-    char * data[3];
+    char *data[3];
     for(int i = 0; i < 3; i++) {
         data[i] = ((char *)input)[i];
     }
