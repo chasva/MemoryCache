@@ -8,7 +8,7 @@
 #include <string.h>
 #include <unistd.h>
 
-#define BUFFER_SIZE 32
+
 #define MAP_SIZE 8
 #define SERVER_PORT 2777
 #define MESSAGE_SIZE 1024
@@ -16,233 +16,183 @@
 pthread_mutex_t lock;
 
 /* Node Structure that the HashMap will contain */
-typedef struct {
-    int key;
-    char * fileName;
-    char * size;
-    char * contents;
-    void * next;
-} node;
-
-/*Structure for the actual Map that will hold the nodes, max of 8 */
-typedef struct {
-    int size;
-    node * headNode;
-} table;
-
-/*Method to Create the Table that will be Global Variable */
-table createTable() {
-    table t;
-    t.size = MAP_SIZE;
-    node tempHead = {-1, NULL, NULL, NULL, NULL,};
-    t.headNode = &tempHead;
-    return t;
-}
-/*Global Variable so all threads can access it */
-table hashTable;
-
-/*Returns a unique HashKey based on Filename */
-int getHashKey(char * fileName) {
+//Method to get the slot
+int getHash(char * fileName) {
     int hashCode = 0;
     int length = strlen(fileName);
     char name[length + 1];
     strcpy(name, fileName);
 
-    for(int i = 0; i < BUFFER_SIZE; i++) {
+    for(int i = 0; i < length; i++) {
         if(name[i] == '\n' || name[i] == '\0') {
             break;
         }
         hashCode += fileName[i] * 19^(2 * i - i);
-        length = i;
+
     }
-    return hashCode % length;
+    return hashCode % MAP_SIZE;
 }
 
-/*Returns the size and contents of a file in format n:[contents] n being size, if no contents then it returns 0: */
-char * loadContents(int key) {
-    //Start at Head Node
-    node currentNode = *hashTable.headNode;
+/* Node Structure that the HashMap will contain */
+typedef struct {
+    char * fileName;
+    char * contents;
+    struct node * next;
+} node;
 
-    //Iterate through till a match is made
+typedef struct {
+    node **nodes;
+} table;
+
+table * createTable() {
+    table * hashTable = malloc(sizeof(table) * 1);
+
+    hashTable->nodes = malloc(sizeof(node *) * MAP_SIZE);
+
+    //Set each node to NULL
     for(int i = 0; i < MAP_SIZE; i++) {
-        if(key == currentNode.key) {
-
-            //Copy the size with room for the contents
-            char * loadedContent = malloc(strlen(currentNode.contents) + strlen(currentNode.size) + 1);
-            strcpy(loadedContent, currentNode.size);
-
-            //Combine the size with the content
-            strcat(loadedContent, currentNode.contents);
-
-
-            return loadedContent;
-        }
-        if(currentNode.next == NULL) {
-            break;
-        }
-        currentNode = *(node *)currentNode.next;
+        hashTable->nodes[i] = NULL;
     }
 
-    char * empty = "0:";
-    return empty;
+    return hashTable;
+
 }
 
-//Used to remove the file node and link one ahead to the rest
-void removeNode(int key) {
-    //Check if head node needs removal
-    node currentNode = *hashTable.headNode;
-    if(currentNode.key = key) {
-        if(currentNode.next != NULL) {
-            //Assign the new head node
-            hashTable.headNode = (node *)currentNode.next;
+//Creating the global table value
+table * mainTable;
 
-            //Free the memory of the Old Head
-            free(currentNode.contents);
-            free(currentNode.fileName);
-            free(currentNode.size);
-            return;
-        }
-        //If there are no elements behind the head
-        else {
-            //Remembering to free the memory
-            free(currentNode.contents);
-            free(currentNode.fileName);
-            free(currentNode.size);
-            hashTable = createTable();
-            return;
-        }
-    }
+node * createNode(char * fileName, char * contents) {
+    //Memory Allocation
+    node * newNode = malloc(sizeof(newNode) +1);
+    newNode->fileName = malloc(strlen(fileName) +1);
+    newNode->contents = malloc(strlen(contents) +1);
 
-    //Assign the nextnode to be used
-    node nextNode;
+    //Copying
+    strcpy(newNode->fileName, fileName);
+    strcpy(newNode->contents, contents);
 
-    //Loop through while keeping track of nodes
-    for(int i = 0; i < MAP_SIZE; i++) {
-        //Continue only if there is a next node
-        if(currentNode.next != NULL)
-            nextNode = *(node *)currentNode.next;
-        else
-            return;
+    //Set the next node as null
+    newNode->next = NULL;
 
-
-        //Enter if it is the node to remove
-        if(key == nextNode.key) {
-            //Free the memory originally allocated for the pointers
-            free(currentNode.contents);
-            free(currentNode.fileName);
-            free(currentNode.size);
-
-            //Link the previous node to next one if there is to not lose the chain
-            if(nextNode.next != NULL)
-                currentNode.next = nextNode.next;
-            else
-                return;
-
-        }
-        //Move the node up
-        currentNode = *(node *)currentNode.next;
-
-    }
+    return newNode;
 }
 
-void deleteNode(node deletion) {
-    free(deletion.contents);
-    free(deletion.size);
-    free(deletion.fileName);
-}
+/*Method for Setting the Node, Handles Collisions */
+void setNode(char * fileName, char * contents) {
+    int slot = getHash(fileName);
 
-//MEthod to add nodes to the hash table
-void addToTable(node newNode) {
+    //Get the pointer in the slot
+    node * slotNode = mainTable->nodes[slot];
 
-    node currentNode = *hashTable.headNode;
-
-
-    //If headnode has collision
-    if(currentNode.key == newNode.key) {
-        //Replace the Node, Delete it, and return
-        newNode.next = currentNode.next;
-        hashTable.headNode = &newNode;
-        deleteNode(currentNode);
+    //No Collision
+    if(slotNode == NULL) {
+        mainTable->nodes[slot] = createNode(fileName, contents);
         return;
     }
 
-    //For all other collisions
-    node nextNode;
-    for(int i = 0; i < MAP_SIZE; i++) {
-        if(currentNode.next != NULL)
-            nextNode = *(node *)currentNode.next;
-        else
-            break;
-        if(nextNode.key == newNode.key) {
-            newNode.next = nextNode.next;
-            currentNode.next = (void *)&newNode;
-            deleteNode(nextNode);
-            return;
-        }
-    }
-
-    //For empty nodes
-    for(int i = 0; i < MAP_SIZE; i++) {
-        //Check if the empty node
-        if(currentNode.next == NULL) {
-            //Link to next node
-            currentNode.next = &newNode;
-            //Check how long the list is then delete head if necessary
-            if(i >= MAP_SIZE - 1) {
-                //Will delete the head and assign the node as necessary
-                removeNode(hashTable.headNode->key);
-            }
+    node * previousNode;
+    //Collision replacement
+    while(slotNode != NULL) {
+        //If same filename replace contents
+        if(strcmp(fileName, slotNode->fileName) == 0) {
+            //Free the old memory
+            free(slotNode->contents);
+            slotNode->contents = malloc(strlen(contents) + 1);
+            strcpy(slotNode->contents, contents);
             return;
         }
 
-        //Continue through loop
-        currentNode = *(node *)currentNode.next;
+        previousNode = slotNode;
+        slotNode = slotNode->next;
     }
+
+    //Add to list if at end of chain
+    previousNode->next = createNode(fileName, contents);
 
 }
-//Create the new Node
-void createNode(char * input[]) {
-    node newNode;
-    newNode.fileName = input[0];
-    newNode.key = getHashKey(newNode.fileName);
-    newNode.size = input[1];
-    newNode.contents = input[2];
 
-    addToTable(newNode);
+//Returns the contents of a file only, no size
+char * loadContents(char * fileName) {
+    int slot = getHash(fileName);
+    char * contents = NULL;
+    node * slotNode = mainTable->nodes[slot];
+    while(slotNode != NULL) {
+        if(strcmp(slotNode->fileName, fileName) == 0) {
+            contents = malloc(strlen(slotNode->contents) + 1);
+            strcpy(contents, slotNode->contents);
+            return contents;
+            //TODO Free the memory that is allocated for it
+        }
+        slotNode = slotNode->next;
+    }
+    char * empty = "";
+    return empty;
+}
+
+//Used to free the memory of file in slot and unlink it
+void removeFile(char * fileName) {
+    int slot = getHash(fileName);
+
+    //Get the pointer in the slot
+    node * slotNode = mainTable->nodes[slot];
+
+    //Nothing exists so return
+    if(slotNode == NULL) {
+        return;
+    }
+
+    node * previousNode = NULL;
+    //Collision replacement
+    while(slotNode != NULL) {
+        //If same filename free the memory
+        if(strcmp(fileName, slotNode->fileName) == 0) {
+            //Free the memory
+            free(slotNode->contents);
+            free(slotNode->fileName);
+
+            //Get rid of Link
+            if(previousNode != NULL) {
+                previousNode->next = slotNode->next;
+            }
+        }
+
+        previousNode = slotNode;
+        slotNode = slotNode->next;
+    }
 
 }
 
 //make sure that the lock should be applied to all of these methods and not just delete and load
 void * loadFile(void * fileName) {
-    int key = getHashKey((char *)fileName);
+    //Acquire the Lock
     pthread_mutex_lock(&lock);
-    //use the hash key to return the contents of the file
-    char * file = loadContents(key);
+    //Calls the file
+    char * contents = loadContents((char *)fileName);
     //Release lock
     pthread_mutex_unlock(&lock);
-    return (void *)file;
+    return (void *)contents;
+}
+
+
+node passNode;
+void * storeToCache(void * input){
+    //Get the Filename and Contents set it
+    node * solution = (node *)input;
+    char * fileName = solution->fileName;
+    char * contents = solution->contents;
+
+    pthread_mutex_lock(&lock);
+
+    setNode(fileName, contents);
+
+    pthread_mutex_unlock(&lock);
 
 }
 
 void * deleteCache(void * fileName) {
-    int hashKey = getHashKey(fileName);
-
-    pthread_mutex_lock(&lock);
-    //remove the file from the cache using the key
-    removeNode(hashKey);
-    //release lock
-    pthread_mutex_unlock(&lock);
-}
-
-void * storeToCache(void * input){
-    //Get the Filename, Size, and Contents store it in char * arr called data.
-    char *data[3];
-    for(int i = 0; i < 3; i++) {
-        data[i] = ((char *)input)[i];
-    }
     pthread_mutex_lock(&lock);
 
-    createNode(data);
+    removeFile(fileName);
 
     pthread_mutex_unlock(&lock);
 }
@@ -282,20 +232,20 @@ void * messageReceived(char * receiveLine){
     void * result;
 
     //check what the command was and fire off thread
-    if(strcmp(command, "load")){
+    if(strcmp(command, "load") == 0){
         //load file from cache
         pthread_create(&cacheThread, NULL, loadFile, (void *) &fileName);
 
         //return 0 if file not found - implement in hash map?
         pthread_join(cacheThread, &result);
 
-    }else if(strcmp(command, "store")){
+    }else if(strcmp(command, "store") == 0){
         //store file in cache -- pass filename and contents
 
 
         pthread_create(&cacheThread, NULL, storeToCache, (void *) &fileName);
 
-    }else if(strcmp(command, "rm")){
+    }else if(strcmp(command, "rm") == 0){
         //remove file from cache
         pthread_create(&cacheThread, NULL, deleteCache, (void *) &fileName);
 
