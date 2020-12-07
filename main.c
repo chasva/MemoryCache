@@ -248,7 +248,7 @@ void * storeToCache(void * input){
 }
 
 //called whenever the client receives a message from the server (dispatcher)
-void messageReceived(char * receiveLine){
+void * messageReceived(char * receiveLine){
     pthread_t cacheThread;
 
     //set to pointers to work better with the hashtable functions
@@ -278,12 +278,16 @@ void messageReceived(char * receiveLine){
         }
     }
 
+    //declaring return variable that will be joined to thread
+    void * result;
+
     //check what the command was and fire off thread
     if(strcmp(command, "load")){
         //load file from cache
         pthread_create(&cacheThread, NULL, loadFile, (void *) &fileName);
 
-        //return 0 if file not found
+        //return 0 if file not found - implement in hash map?
+        pthread_join(cacheThread, &result);
 
     }else if(strcmp(command, "store")){
         //store file in cache -- pass filename and contents
@@ -300,8 +304,12 @@ void messageReceived(char * receiveLine){
 
     }
 
-    //free the memory that was used
+    //free the memory that was used; if it's not allocated it'll be ignored anyway
+    free(command);
+    free(fileName);
+    free(contents);
 
+    return result;
 }
 
 int main(int argc, char * argv[]) {
@@ -334,7 +342,10 @@ int main(int argc, char * argv[]) {
     }
 
     //write to socket to transmit to server -- implement this later for returning file information to the dispatcher
-    //snprintf(sendLine, sizeof(sendLine), "Data to be sent");
+    //snprintf(sendLine, sizeof(sendLine), "line to send");
+    //write(serverSocket, sendLine, strlen(sendLine));
+
+    char * response;
 
     //listen for the server
     while((bytesRead = read(serverSocket, receiveLine, MESSAGE_SIZE)) > 0){
@@ -342,6 +353,11 @@ int main(int argc, char * argv[]) {
         receiveLine[bytesRead] = 0;
 
         //manage the input
-        messageReceived(receiveLine);
+        response = (char *) messageReceived(receiveLine);
+        strcpy(sendLine, response);
+
+        //send response
+        //snprintf(sendLine, sizeof(sendLine), response);
+        write(serverSocket, sendLine, strlen(sendLine));
     }
 }
