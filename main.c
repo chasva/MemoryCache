@@ -279,10 +279,6 @@ void * messageReceived(char * receiveLine){
         pthread_join(cacheThread, &result);
 
     }else if(strcmp(command, "store") == 0){
-        //Get the size from contents
-
-
-
         //store file in cache -- pass filename and contents
         passNode.fileName = malloc(strlen(fileName) + 1);
         passNode.contents = malloc(strlen(contents) + 1);
@@ -306,9 +302,6 @@ void * messageReceived(char * receiveLine){
         //invalid command
         return NULL;
     }
-
-    //free the memory that was used; if it's not allocated it'll be ignored anyway
-
 
     return result;
 }
