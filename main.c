@@ -260,7 +260,7 @@ void * messageReceived(void * input){
         strtok(fileName, "\n");
 
         //Load it
-        result = malloc(loadFile(fileName));
+        result = malloc(strlen(loadContents(fileName))+1);
         strcpy(result, loadFile(fileName));
 
     }else if(strcmp(command, "store") == 0){
