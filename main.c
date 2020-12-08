@@ -21,8 +21,10 @@ void closeConnection(){
     exit(1);
 }
 
-/* Node Structure that the HashMap will contain */
-//Method to get the slot
+//Lock that will be used
+pthread_mutex_t lock;
+
+//Method to get the slot in Hashmap
 int getHash(char * fileName) {
     int hashCode = 0;
     int length = strlen(fileName);
@@ -46,10 +48,12 @@ typedef struct {
     struct node * next;
 } node;
 
+//The HashMap-Table thingy
 typedef struct {
     node **nodes;
 } table;
 
+//Initialize it
 table * createTable() {
     table * hashTable = malloc(sizeof(table) * 1);
 
@@ -67,6 +71,7 @@ table * createTable() {
 //Creating the global table value
 table * mainTable;
 
+//Method used to create nodes
 node * createNode(char * fileName, char * contents) {
     //Memory Allocation
     node * newNode = malloc(sizeof(newNode) +1);
@@ -117,7 +122,7 @@ void setNode(char * fileName, char * contents) {
 
 }
 
-//Returns the contents of a file only, no size
+//Returns the contents of a file
 char * loadContents(char * fileName) {
     int slot = getHash(fileName);
     char * contents = NULL;
@@ -178,52 +183,42 @@ void removeFile(char * fileName) {
 }
 
 //make sure that the lock should be applied to all of these methods and not just delete and load
-void * loadFile(void * fileName) {
+char * loadFile(void * fileName) {
     //Acquire the Lock
     pthread_mutex_lock(&lock);
     //Calls the file
-    char * contents = loadContents((char *)fileName);
+    char * contents = loadContents(fileName);
     //Release lock
     pthread_mutex_unlock(&lock);
-    return (void *)contents;
+    return contents;
 }
 
-
-
-void * storeToCache(void * input){
+void storeToCache(char * fileName, char * contents){
     //Get the Filename and Contents set it
-    node * solution = (node *)input;
-    char * fileName = solution->fileName;
-    char * contents = solution->contents;
-
     pthread_mutex_lock(&lock);
-
     setNode(fileName, contents);
-
     pthread_mutex_unlock(&lock);
-
 }
 
-void * deleteCache(void * fileName) {
+void deleteCache(char * fileName) {
     pthread_mutex_lock(&lock);
-
     removeFile(fileName);
-
     pthread_mutex_unlock(&lock);
 }
 
 node passNode;
 //called whenever the client receives a message from the server (dispatcher)
-void * messageReceived(char * receiveLine){
-    pthread_t cacheThread;
-
+void * messageReceived(void * input){
+    char * receiveLine = (char *)input;
     //set to pointers to work better with the hashtable functions
     char * token = NULL;
     char * command = NULL;
     char * fileName = NULL;
     char * contents = NULL;
+    char * result = NULL;
 
-    //Freeing the memory for times after first
+    //Freeing the memory for times after first use
+    free(result);
     free(contents);
     free(fileName);
     free(token);
@@ -237,74 +232,63 @@ void * messageReceived(char * receiveLine){
     command = malloc(strlen(token) + 1);
     strcpy(command, token);
 
-
     //further tokenize to get the other strings
     while(token != NULL){
-
         //check if the filename or contents has a value yet
         if(fileName == NULL) {
             token = strtok(NULL, " ");
             fileName = malloc(strlen(token) +1);
             strcpy(fileName, token);
-
         }
-
         if(contents == NULL && strcmp(command, "store") == 0){
-
             //Get the contents before and after the colon
             token = strtok(NULL, "\n");
             contents = malloc(strlen(token) + 1);
             strcpy(contents, token);
-
         }
         else {
             break;
         }
-
     }
 
-
     //declaring return variable that will be joined to thread
-    void * result;
+
 
     //check what the command was and fire off thread
     if(strcmp(command, "load") == 0){
         //Get rid of new line character
         strtok(fileName, "\n");
 
-        //Load the file
-        pthread_create(&cacheThread, NULL, loadFile, (void *) fileName);
-
-        //return 0 if file not found - implement in hash map?
-        pthread_join(cacheThread, &result);
+        //Load it
+        result = malloc(loadFile(fileName));
+        strcpy(result, loadFile(fileName));
 
     }else if(strcmp(command, "store") == 0){
         //store file in cache -- pass filename and contents
-        passNode.fileName = malloc(strlen(fileName) + 1);
-        passNode.contents = malloc(strlen(contents) + 1);
-        strcpy(passNode.fileName, fileName);
-        strcpy(passNode.contents, contents);
-        pthread_create(&cacheThread, NULL, storeToCache, (void *)&passNode);
+        storeToCache(fileName, contents);
 
-        //Wait till it joins to be able to free the memory
-
-        //Free the memory used for contents
-
+        //Set result
+        result = malloc(strlen("Successful Store") + 1);
+        strcpy(result, "Successful Store");
 
     }else if(strcmp(command, "rm") == 0){
         //Get rid of the new line character
         strtok(fileName, "\n");
 
         //Remove the file
-        pthread_create(&cacheThread, NULL, deleteCache, (void *) fileName);
+        deleteCache(fileName);
+        result = malloc(strlen("Successful Removal") + 1);
+        strcpy(result, "Successful Removal");
 
     }else{
         //invalid command
-        return NULL;
+        result = malloc(strlen("Invalid Command") + 1);
+        strcpy(result, "Invalid Command");
     }
 
     return result;
 }
+
 int main(int argc, char * argv[]) {
     //initialize the mutex that will be used for the methods (add error handling?)
     pthread_mutex_init(&lock, NULL);
@@ -355,10 +339,14 @@ int main(int argc, char * argv[]) {
             //replace the newline with a null terminator
             receiveLine[bytesRead] = '\0';
 
-            //manage the input
-            response = (char *) messageReceived(receiveLine);
+            pthread_t cacheThread;
+            pthread_create(&cacheThread, NULL, messageReceived, (void *) receiveLine);
 
-            snprintf(sendLine, sizeof(sendLine), response);
+            //return 0 if file not found - implement in hash map?
+            pthread_join(cacheThread, &response);
+            //manage the input
+
+            snprintf(sendLine, sizeof(sendLine), (char *)response);
             write(connectionToClient, sendLine, strlen(sendLine));
 
             //get rid of artifacts by zeroing out
