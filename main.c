@@ -10,7 +10,7 @@
 #include <sys/types.h>
 
 #define MAP_SIZE 8
-#define SERVER_PORT 1401
+#define SERVER_PORT 1041
 #define MESSAGE_SIZE 1024
 
 int serverSocket;
@@ -359,7 +359,7 @@ int main(int argc, char * argv[]) {
             response = (char *) messageReceived(receiveLine);
 
             snprintf(sendLine, sizeof(sendLine), response);
-            write(serverSocket, sendLine, strlen(sendLine));
+            write(connectionToClient, sendLine, strlen(sendLine));
 
             //get rid of artifacts by zeroing out
             bzero(&receiveLine, sizeof(receiveLine));
