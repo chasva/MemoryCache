@@ -125,7 +125,9 @@ char * loadContents(char * fileName) {
         }
         slotNode = slotNode->next;
     }
-    char * empty = "";
+
+    //What to Do if the file isn't found
+    char * empty = "0:";
     return empty;
 }
 
@@ -153,7 +155,14 @@ void removeFile(char * fileName) {
             //Get rid of Link
             if(previousNode != NULL) {
                 previousNode->next = slotNode->next;
+                return;
             }
+                //Previous node hasn't been declared yet so set slot to null
+            else {
+                mainTable->nodes[slot] = NULL;
+                return;
+            }
+
         }
 
         previousNode = slotNode;
@@ -168,13 +177,14 @@ void * loadFile(void * fileName) {
     pthread_mutex_lock(&lock);
     //Calls the file
     char * contents = loadContents((char *)fileName);
+    printf(contents);
     //Release lock
     pthread_mutex_unlock(&lock);
     return (void *)contents;
 }
 
 
-node passNode;
+
 void * storeToCache(void * input){
     //Get the Filename and Contents set it
     node * solution = (node *)input;
@@ -197,76 +207,111 @@ void * deleteCache(void * fileName) {
     pthread_mutex_unlock(&lock);
 }
 
+node passNode;
 //called whenever the client receives a message from the server (dispatcher)
 void * messageReceived(char * receiveLine){
     pthread_t cacheThread;
 
     //set to pointers to work better with the hashtable functions
-    char * token;
-    char * command;
+    char * token = NULL;
+    char * command = NULL;
     char * fileName = NULL;
     char * contents = NULL;
 
+    //Freeing the memory for times after first
+    free(contents);
+    free(fileName);
+    free(token);
+    free(command);
+    free(passNode.fileName);
+    free(passNode.contents);
+
     //when something received, tokenize the string delimiting by spaces
+    token = malloc(strlen(receiveLine) +1);
     token = strtok(receiveLine, " ");
     command = malloc(strlen(token) + 1);
     strcpy(command, token);
 
+
     //further tokenize to get the other strings
     while(token != NULL){
-        token = strtok(NULL, " ");
 
         //check if the filename or contents has a value yet
-        if(fileName == NULL){
-            fileName = malloc(strlen(token) + 1);
+        if(fileName == NULL) {
+            token = strtok(NULL, " ");
+            fileName = malloc(strlen(token) +1);
             strcpy(fileName, token);
-        }else if(contents == NULL){
+
+        }
+
+        if(contents == NULL && strcmp(command, "store") == 0){
+
+            //Get the contents before and after the colon
+            token = strtok(NULL, "\n");
             contents = malloc(strlen(token) + 1);
             strcpy(contents, token);
-        }else{
+
+        }
+        else {
             break;
         }
+
     }
+
 
     //declaring return variable that will be joined to thread
     void * result;
 
     //check what the command was and fire off thread
     if(strcmp(command, "load") == 0){
-        //load file from cache
-        pthread_create(&cacheThread, NULL, loadFile, (void *) &fileName);
+        //Get rid of new line character
+        strtok(fileName, "\n");
+
+        //Load the file
+        pthread_create(&cacheThread, NULL, loadFile, (void *) fileName);
 
         //return 0 if file not found - implement in hash map?
         pthread_join(cacheThread, &result);
 
     }else if(strcmp(command, "store") == 0){
+        //Get the size from contents
+
+
+
         //store file in cache -- pass filename and contents
+        passNode.fileName = malloc(strlen(fileName) + 1);
+        passNode.contents = malloc(strlen(contents) + 1);
+        strcpy(passNode.fileName, fileName);
+        strcpy(passNode.contents, contents);
+        pthread_create(&cacheThread, NULL, storeToCache, (void *)&passNode);
 
+        //Wait till it joins to be able to free the memory
 
-        pthread_create(&cacheThread, NULL, storeToCache, (void *) &fileName);
+        //Free the memory used for contents
+
 
     }else if(strcmp(command, "rm") == 0){
-        //remove file from cache
-        pthread_create(&cacheThread, NULL, deleteCache, (void *) &fileName);
+        //Get rid of the new line character
+        strtok(fileName, "\n");
+
+        //Remove the file
+        pthread_create(&cacheThread, NULL, deleteCache, (void *) fileName);
 
     }else{
         //invalid command
-
+        return NULL;
     }
 
     //free the memory that was used; if it's not allocated it'll be ignored anyway
-    free(command);
-    free(fileName);
-    free(contents);
+
 
     return result;
 }
-
 int main(int argc, char * argv[]) {
     //initialize the mutex that will be used for the methods (add error handling?)
     pthread_mutex_init(&lock, NULL);
     //initialize the hash table
-    hashTable = createTable();
+    mainTable = createTable();
 
     //start tcp connection and have it always listening for dispatcher *********
     int serverSocket, bytesRead;
