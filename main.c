@@ -2,18 +2,24 @@
 #include <stdlib.h>
 #include <string.h>
 #include <netinet/in.h>
-#include <arpa/inet.h>
 #include <sys/socket.h>
 #include <pthread.h>
 #include <string.h>
 #include <unistd.h>
-
+#include <signal.h>
+#include <sys/types.h>
 
 #define MAP_SIZE 8
-#define SERVER_PORT 2777
+#define SERVER_PORT 1401
 #define MESSAGE_SIZE 1024
 
+int serverSocket;
 pthread_mutex_t lock;
+
+void closeConnection(){
+    close(serverSocket);
+    exit(1);
+}
 
 /* Node Structure that the HashMap will contain */
 //Method to get the slot
@@ -255,9 +261,11 @@ void * messageReceived(char * receiveLine){
     }
 
     //free the memory that was used; if it's not allocated it'll be ignored anyway
+    pthread_mutex_lock(&lock);
     free(command);
     free(fileName);
     free(contents);
+    pthread_mutex_unlock(&lock);
 
     return result;
 }
@@ -265,49 +273,62 @@ void * messageReceived(char * receiveLine){
 int main(int argc, char * argv[]) {
     //initialize the mutex that will be used for the methods (add error handling?)
     pthread_mutex_init(&lock, NULL);
+
     //initialize the hash table
     hashTable = createTable();
 
     //start tcp connection and have it always listening for dispatcher *********
-    int serverSocket, bytesRead;
+    int connectionToClient, bytesRead;
 
     char sendLine[MESSAGE_SIZE];
     char receiveLine[MESSAGE_SIZE];
 
-    //create the socket (with error detection)
-    if((serverSocket = socket(AF_INET, SOCK_STREAM, 0)) < 0){
-
-    }
-
-    //set up the server connection
+    //create the socket
+    serverSocket = socket(AF_INET, SOCK_STREAM, 0);
     struct sockaddr_in serverAddress;
     bzero(&serverAddress, sizeof(serverAddress));
-
     serverAddress.sin_family = AF_INET;
+
+    //listen to any address
+    //convert address and ports to network formats
+    serverAddress.sin_addr.s_addr = htonl(INADDR_ANY);
     serverAddress.sin_port = htons(SERVER_PORT);
 
-    //connect to server
-    if(connect(serverSocket, (struct sockaddr *) &serverAddress, sizeof(serverAddress)) < 0){
-
+    //bind to the port
+    if(bind(serverSocket, (struct sockaddr *) &serverAddress, sizeof(serverAddress)) == -1){
+        printf("Port cannot be bound at this time\n");
+        exit(-1);
     }
 
-    //write to socket to transmit to server -- implement this later for returning file information to the dispatcher
-    //snprintf(sendLine, sizeof(sendLine), "line to send");
-    //write(serverSocket, sendLine, strlen(sendLine));
+    //register for Ctrl+C
+    struct sigaction sigIntHandler;
+    sigIntHandler.sa_handler = closeConnection;
+    sigIntHandler.sa_flags = 0;
+
+    sigaction(SIGINT, &sigIntHandler, NULL);
+
+    //listen for connections
+    listen(serverSocket, 10);
 
     char * response;
 
-    //listen for the server
-    while((bytesRead = read(serverSocket, receiveLine, MESSAGE_SIZE)) > 0){
-        //null terminate the bytes received
-        receiveLine[bytesRead] = 0;
+    while(1){
+        connectionToClient = accept(serverSocket, (struct sockaddr *) NULL, NULL);
 
-        //manage the input
-        response = (char *) messageReceived(receiveLine);
-        strcpy(sendLine, response);
+        //Get the request that the client has
+        while((bytesRead = read(connectionToClient, receiveLine, MESSAGE_SIZE)) > 0){
+            //replace the newline with a null terminator
+            receiveLine[bytesRead] = '\0';
 
-        //send response
-        //snprintf(sendLine, sizeof(sendLine), response);
-        write(serverSocket, sendLine, strlen(sendLine));
+            //manage the input
+            response = (char *) messageReceived(receiveLine);
+
+            snprintf(sendLine, sizeof(sendLine), response);
+            write(serverSocket, sendLine, strlen(sendLine));
+
+            //get rid of artifacts by zeroing out
+            bzero(&receiveLine, sizeof(receiveLine));
+            close(connectionToClient);
+        }
     }
 }
